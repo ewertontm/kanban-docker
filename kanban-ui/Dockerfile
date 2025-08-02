@@ -1,5 +1,5 @@
 # Build stage
-FROM node:18-alpine AS build
+FROM node:16-alpine AS build
 
 # Install security updates
 RUN apk update && apk upgrade
@@ -13,14 +13,14 @@ WORKDIR /usr/src/app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production && npm cache clean --force
+# Install dependencies including dev dependencies for build
+RUN npm ci && npm cache clean --force
 
 # Copy source code
 COPY . .
 
 # Build application
-RUN npm run build -- --configuration production
+RUN npm run build
 
 # Production stage
 FROM nginx:1.25-alpine
@@ -37,20 +37,20 @@ COPY --from=build /usr/src/app/dist/kanban-ui /usr/share/nginx/html
 # Copy custom nginx configuration (optional)
 # COPY nginx.conf /etc/nginx/nginx.conf
 
-# Create non-root user for nginx
-RUN adduser -D -s /bin/sh www-data
+# Create non-root user for nginx (use existing nginx user)
+RUN addgroup -g 101 -S nginx || true
 
 # Change ownership of nginx directories
-RUN chown -R www-data:www-data /var/cache/nginx && \
-    chown -R www-data:www-data /var/log/nginx && \
-    chown -R www-data:www-data /etc/nginx/conf.d
+RUN chown -R nginx:nginx /var/cache/nginx && \
+    chown -R nginx:nginx /var/log/nginx && \
+    chown -R nginx:nginx /etc/nginx/conf.d
 
 # Touch and set permissions for nginx.pid
 RUN touch /var/run/nginx.pid && \
-    chown -R www-data:www-data /var/run/nginx.pid
+    chown -R nginx:nginx /var/run/nginx.pid
 
 # Switch to non-root user
-USER www-data
+USER nginx
 
 # Expose port
 EXPOSE 80

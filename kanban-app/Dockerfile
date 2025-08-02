@@ -1,8 +1,5 @@
 # Build stage
-FROM maven:3.9.6-openjdk-17-slim AS build
-
-# Create non-root user for build
-RUN groupadd -r maven && useradd -r -g maven maven
+FROM maven:3.9-eclipse-temurin-11-alpine AS build
 
 # Set working directory
 WORKDIR /workspace
@@ -18,13 +15,13 @@ COPY src /workspace/src
 RUN mvn clean package -DskipTests -B
 
 # Runtime stage
-FROM openjdk:17-jre-slim
+FROM eclipse-temurin:11-jre-alpine
 
 # Create non-root user
-RUN groupadd -r app && useradd -r -g app app
+RUN addgroup -g 1001 -S app && adduser -S app -u 1001 -G app
 
-# Install security updates
-RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
+# Install security updates and wget for health check
+RUN apk update && apk upgrade && apk add --no-cache wget && rm -rf /var/cache/apk/*
 
 # Set working directory
 WORKDIR /app
@@ -43,12 +40,11 @@ EXPOSE 8080
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:8080/actuator/health || exit 1
+  CMD wget --no-verbose --tries=1 --spider http://localhost:8080/actuator/health || exit 1
 
-# Start application with optimized JVM settings
+# Start application with optimized JVM settings for Java 11
 ENTRYPOINT ["java", \
-    "-XX:+UnlockExperimentalVMOptions", \
-    "-XX:+UseCGroupMemoryLimitForHeap", \
-    "-XX:MaxRAMFraction=1", \
+    "-XX:+UseContainerSupport", \
+    "-XX:MaxRAMPercentage=75.0", \
     "-XshowSettings:vm", \
     "-jar", "app.jar"]
